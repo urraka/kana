@@ -1,0 +1,546 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Kana (hiragana / katakana)</title>
+	<style>
+		html,body {margin:0;width:100%;height:100%;cursor:default;}
+		body {font:12px/1.5 Arial,sans-serif;background:#000;color:#fff;}
+		body {display:flex;align-items:center;justify-content:center;}
+		body > table {margin:0 auto 24px;}
+		table {border-collapse:collapse;}
+		td {vertical-align:top;text-align:center;padding:3px 10px;}
+		button {border:none;background:transparent;color:#fff;outline:0 none;cursor:pointer;}
+		button {font-size:18px;font-variant:small-caps;}
+		button.disabled {color:#666;cursor:default;}
+		button::-moz-focus-inner {border:none;}
+		.chart td span {font-size:2em;white-space:nowrap;}
+		.chart {color:#666;}
+		.chart .selected {color:#fff;}
+		.chart tr:not(.selected):hover {color:#ccc;}
+		.centerview {width:50em;vertical-align:middle;}
+		.game input {border:none;outline:none;font:inherit;color:inherit;background:transparent;text-align:center;}
+		.game span:nth-child(1) {font-size:20em;}
+		.game span:nth-child(2) {font-size:2em;}
+		.noselect {-webkit-user-select:none;-moz-user-select:none;user-select:none;}
+		.hidden {display:none;}
+	</style>
+	<script>
+		var gamestate = {
+			chars: [],
+			current: 0
+		};
+
+		function initialize() {
+			sel(".chart tr").forEach(function(row) {
+				row.addEventListener("click", function onrowclick(event) {
+					event.currentTarget.classList.toggle("selected");
+					on_selection_changed();
+				});
+			});
+
+			sel("td.chart").forEach(function(td) {
+				var type = td.classList.contains("hiragana") ? "hiragana" : "katakana";
+				var q = "td." + type + " tr";
+
+				td.addEventListener("click", function onclearclick(event) {
+					if (event.target === td) {
+						var rows = sel(q + ".selected");
+
+						if (rows.length > 0)
+							rows.forEach(function(row) {row.classList.remove("selected");});
+						else
+							sel(q).forEach(function(row) {row.classList.add("selected");});
+
+						on_selection_changed();
+					}
+				});
+			});
+
+			sel(".start button")[0].addEventListener("click", function(event) {
+				start_game();
+			});
+
+			sel(".game input")[0].addEventListener("input", function() {
+				game_submit();
+			});
+
+			window.addEventListener("keydown", function(event) {
+				switch (event.keyCode) {
+					case 27:
+						if (is_game_active())
+							end_game();
+						break;
+
+					case 13:
+						if (is_game_active())
+							game_submit();
+						break;
+				}
+			});
+
+			window.addEventListener("click", function() {
+				var element = is_game_active() ? sel(".game input")[0] : sel(".start button")[0];
+
+				if (element !== document.activeElement)
+					element.focus();
+			});
+
+			window.addEventListener("beforeunload", function() {
+				var selection = sel(".chart table").map(function(table) {
+					return sel("tr.selected", table).map(function(row) {return row.rowIndex;});
+				});
+
+				localStorage.selection = JSON.stringify(selection);
+			});
+
+			if (localStorage.selection) {
+				var selection = JSON.parse(localStorage.selection);
+
+				sel(".chart table").forEach(function(table, i) {
+					selection[i].forEach(function(rowIndex) {
+						table.rows[rowIndex].classList.toggle("selected", true);
+					});
+				});
+
+				if (sel(".chart tr.selected").length > 0)
+					sel(".start button")[0].classList.toggle("disabled", false);
+			}
+
+			sel(".start button")[0].focus();
+		}
+
+		function game_submit() {
+			var str = sel(".game input")[0].value.toLowerCase();
+
+			if (gamestate.chars[gamestate.current].value === str)
+				game_next();
+		}
+
+		function is_game_active() {
+			return sel(".start")[0].classList.contains("hidden");
+		}
+
+		function game_next() {
+			var n = gamestate.chars.length;
+
+			if (++gamestate.current === n) {
+				end_game();
+				return;
+				
+				var last = gamestate.chars[n - 1];
+
+				gamestate.current = 0;
+				shuffle(gamestate.chars);
+
+				if (gamestate.chars[0].key === last.key) {
+					gamestate.chars[0] = gamestate.chars[n - 1];
+					gamestate.chars[n - 1] = last;
+				}
+			}
+
+			var ch = gamestate.chars[gamestate.current];
+			sel(".game span").slice(0, 1).forEach(function(span){span.textContent = ch.key;});
+			sel(".game input")[0].value = "";
+		}
+
+		function start_game() {
+			gamestate.current = -1;
+
+			gamestate.chars = [].concat.apply([], sel(".chart tr.selected").map(function(row) {
+				return Array.from(row.children).map(function(cell) {
+					return cell.childNodes.length === 3 ? {
+						key: cell.childNodes[0].textContent,
+						value: cell.childNodes[2].textContent.split("/")[0]
+					} : null;
+				}).filter(Boolean);
+			}));
+
+			if (gamestate.chars.length === 0)
+				return;
+
+			shuffle(gamestate.chars);
+			game_next();
+
+			sel(".chart table").forEach(function(table){table.classList.toggle("hidden", true);});
+			sel(".start")[0].classList.toggle("hidden", true);
+			sel(".game")[0].classList.toggle("hidden", false);
+			sel(".game input")[0].focus();
+		}
+
+		function end_game() {
+			sel(".chart table").forEach(function(table){table.classList.toggle("hidden", false);});
+			sel(".start")[0].classList.toggle("hidden", false);
+			sel(".game")[0].classList.toggle("hidden", true);
+			setTimeout(function(){sel(".start button")[0].focus();}, 0);
+		}
+
+		function on_selection_changed() {
+			sel(".start button")[0].classList.toggle("disabled", sel(".chart tr.selected").length === 0);
+		}
+
+		function sel(x, elem) {
+			return Array.from((elem || document).querySelectorAll(x));
+		}
+
+		function shuffle(a) {
+			for (var i = a.length; i !== 0; i--) {
+				var j = (Math.random() * i)|0;
+				var x = a[i - 1];
+				a[i - 1] = a[j];
+				a[j] = x;
+			}
+		}
+	</script>
+</head>
+<body class="noselect" onload="initialize()">
+	<table>
+		<tr>
+			<td class="hiragana chart">
+				<table>
+					<tr>
+						<td><span>あ</span><br>a</td>
+						<td><span>い</span><br>i</td>
+						<td><span>う</span><br>u</td>
+						<td><span>え</span><br>e</td>
+						<td><span>お</span><br>o</td>
+					</tr>
+					<tr>
+						<td><span>か</span><br>ka</td>
+						<td><span>き</span><br>ki</td>
+						<td><span>く</span><br>ku</td>
+						<td><span>け</span><br>ke</td>
+						<td><span>こ</span><br>ko</td>
+					</tr>
+					<tr>
+						<td><span>が</span><br>ga</td>
+						<td><span>ぎ</span><br>gi</td>
+						<td><span>ぐ</span><br>gu</td>
+						<td><span>げ</span><br>ge</td>
+						<td><span>ご</span><br>go</td>
+					</tr>
+					<tr>
+						<td><span>さ</span><br>sa</td>
+						<td><span>し</span><br>shi</td>
+						<td><span>す</span><br>su</td>
+						<td><span>せ</span><br>se</td>
+						<td><span>そ</span><br>so</td>
+					</tr>
+					<tr>
+						<td><span>ざ</span><br>za</td>
+						<td><span>じ</span><br>ji</td>
+						<td><span>ず</span><br>zu</td>
+						<td><span>ぜ</span><br>ze</td>
+						<td><span>ぞ</span><br>zo</td>
+					</tr>
+					<tr>
+						<td><span>た</span><br>ta</td>
+						<td><span>ち</span><br>chi</td>
+						<td><span>つ</span><br>tsu</td>
+						<td><span>て</span><br>te</td>
+						<td><span>と</span><br>to</td>
+					</tr>
+					<tr>
+						<td><span>だ</span><br>da</td>
+						<td><span>ぢ</span><br>ji</td>
+						<td><span>づ</span><br>zu</td>
+						<td><span>で</span><br>de</td>
+						<td><span>ど</span><br>do</td>
+					</tr>
+					<tr>
+						<td><span>な</span><br>na</td>
+						<td><span>に</span><br>ni</td>
+						<td><span>ぬ</span><br>nu</td>
+						<td><span>ね</span><br>ne</td>
+						<td><span>の</span><br>no</td>
+					</tr>
+					<tr>
+						<td><span>は</span><br>ha</td>
+						<td><span>ひ</span><br>hi</td>
+						<td><span>ふ</span><br>fu</td>
+						<td><span>へ</span><br>he</td>
+						<td><span>ほ</span><br>ho</td>
+					</tr>
+					<tr>
+						<td><span>ば</span><br>ba</td>
+						<td><span>び</span><br>bi</td>
+						<td><span>ぶ</span><br>bu</td>
+						<td><span>べ</span><br>be</td>
+						<td><span>ぼ</span><br>bo</td>
+					</tr>
+					<tr>
+						<td><span>ぱ</span><br>pa</td>
+						<td><span>ぴ</span><br>pi</td>
+						<td><span>ぷ</span><br>pu</td>
+						<td><span>ぺ</span><br>pe</td>
+						<td><span>ぽ</span><br>po</td>
+					</tr>
+					<tr>
+						<td><span>ま</span><br>ma</td>
+						<td><span>み</span><br>mi</td>
+						<td><span>む</span><br>mu</td>
+						<td><span>め</span><br>me</td>
+						<td><span>も</span><br>mo</td>
+					</tr>
+					<tr>
+						<td><span>や</span><br>ya</td>
+						<td></td>
+						<td><span>ゆ</span><br>yu</td>
+						<td></td>
+						<td><span>よ</span><br>yo</td>
+					</tr>
+					<tr>
+						<td><span>ら</span><br>ra</td>
+						<td><span>り</span><br>ri</td>
+						<td><span>る</span><br>ru</td>
+						<td><span>れ</span><br>re</td>
+						<td><span>ろ</span><br>ro</td>
+					</tr>
+					<tr>
+						<td><span>わ</span><br>wa</td>
+						<td><span>を</span><br>wo</td>
+						<td><span>ん</span><br>n/m</td>
+						<td></td>
+						<td></td>
+					</tr>
+				</table>
+			</td>
+			<td class="hiragana chart">
+				<table>
+					<tr>
+						<td><span>きゃ</span><br>kya</td>
+						<td><span>きゅ</span><br>kyu</td>
+						<td><span>きょ</span><br>kyo</td>
+					</tr>
+					<tr>
+						<td><span>ぎゃ</span><br>gya</td>
+						<td><span>ぎゅ</span><br>gyu</td>
+						<td><span>ぎょ</span><br>gyo</td>
+					</tr>
+					<tr>
+						<td><span>しゃ</span><br>sha</td>
+						<td><span>しゅ</span><br>shu</td>
+						<td><span>しょ</span><br>sho</td>
+					</tr>
+					<tr>
+						<td><span>じゃ</span><br>ja</td>
+						<td><span>じゅ</span><br>ju</td>
+						<td><span>じょ</span><br>jo</td>
+					</tr>
+					<tr>
+						<td><span>ちゃ</span><br>cha</td>
+						<td><span>ちゅ</span><br>chu</td>
+						<td><span>ちょ</span><br>cho</td>
+					</tr>
+					<tr>
+						<td><span>にゃ</span><br>nya</td>
+						<td><span>にゅ</span><br>nyu</td>
+						<td><span>にょ</span><br>nyo</td>
+					</tr>
+					<tr>
+						<td><span>ひゃ</span><br>hya</td>
+						<td><span>ひゅ</span><br>hyu</td>
+						<td><span>ひょ</span><br>hyo</td>
+					</tr>
+					<tr>
+						<td><span>びゃ</span><br>bya</td>
+						<td><span>びゅ</span><br>byu</td>
+						<td><span>びょ</span><br>byo</td>
+					</tr>
+					<tr>
+						<td><span>ぴゃ</span><br>pya</td>
+						<td><span>ぴゅ</span><br>pyu</td>
+						<td><span>ぴょ</span><br>pyo</td>
+					</tr>
+					<tr>
+						<td><span>みゃ</span><br>mya</td>
+						<td><span>みゅ</span><br>myu</td>
+						<td><span>みょ</span><br>myo</td>
+					</tr>
+					<tr>
+						<td><span>りゃ</span><br>rya</td>
+						<td><span>りゅ</span><br>ryu</td>
+						<td><span>りょ</span><br>ryo</td>
+					</tr>
+				</table>
+			</td>
+			<td class="centerview">
+				<div class="start"><button class="disabled">start</button></div>
+				<div class="game hidden">
+					<span></span><span></span><span></span>
+					<br>
+					<input type="text" maxlength="3">
+				</div>
+			</td>
+			<td class="katakana chart">
+				<table>
+					<tr>
+						<td><span>キャ</span><br>kya</td>
+						<td><span>キュ</span><br>kyu</td>
+						<td><span>キョ</span><br>kyo</td>
+					</tr>
+					<tr>
+						<td><span>ギャ</span><br>gya</td>
+						<td><span>ギュ</span><br>gyu</td>
+						<td><span>ギョ</span><br>gyo</td>
+					</tr>
+					<tr>
+						<td><span>シャ</span><br>sha</td>
+						<td><span>シュ</span><br>shu</td>
+						<td><span>ショ</span><br>sho</td>
+					</tr>
+					<tr>
+						<td><span>ジャ</span><br>ja</td>
+						<td><span>ジュ</span><br>ju</td>
+						<td><span>ジョ</span><br>jo</td>
+					</tr>
+					<tr>
+						<td><span>チャ</span><br>cha</td>
+						<td><span>チュ</span><br>chu</td>
+						<td><span>チョ</span><br>cho</td>
+					</tr>
+					<tr>
+						<td><span>ニャ</span><br>nya</td>
+						<td><span>ニュ</span><br>nyu</td>
+						<td><span>ニョ</span><br>nyo</td>
+					</tr>
+					<tr>
+						<td><span>ヒャ</span><br>hya</td>
+						<td><span>ヒュ</span><br>hyu</td>
+						<td><span>ヒョ</span><br>hyo</td>
+					</tr>
+					<tr>
+						<td><span>ビャ</span><br>bya</td>
+						<td><span>ビュ</span><br>byu</td>
+						<td><span>ビョ</span><br>byo</td>
+					</tr>
+					<tr>
+						<td><span>ピャ</span><br>pya</td>
+						<td><span>ピュ</span><br>pyu</td>
+						<td><span>ピョ</span><br>pyo</td>
+					</tr>
+					<tr>
+						<td><span>ミャ</span><br>mya</td>
+						<td><span>ミュ</span><br>myu</td>
+						<td><span>ミョ</span><br>myo</td>
+					</tr>
+					<tr>
+						<td><span>リャ</span><br>rya</td>
+						<td><span>リュ</span><br>ryu</td>
+						<td><span>リョ</span><br>ryo</td>
+					</tr>
+				</table>
+			</td>
+			<td class="katakana chart">
+				<table>
+					<tr>
+						<td><span>ア</span><br>a</td>
+						<td><span>イ</span><br>i</td>
+						<td><span>ウ</span><br>u</td>
+						<td><span>エ</span><br>e</td>
+						<td><span>オ</span><br>o</td>
+					</tr>
+					<tr>
+						<td><span>カ</span><br>ka</td>
+						<td><span>キ</span><br>ki</td>
+						<td><span>ク</span><br>ku</td>
+						<td><span>ケ</span><br>ke</td>
+						<td><span>コ</span><br>ko</td>
+					</tr>
+					<tr>
+						<td><span>ガ</span><br>ga</td>
+						<td><span>ギ</span><br>gi</td>
+						<td><span>グ</span><br>gu</td>
+						<td><span>ゲ</span><br>ge</td>
+						<td><span>ゴ</span><br>go</td>
+					</tr>
+					<tr>
+						<td><span>サ</span><br>sa</td>
+						<td><span>シ</span><br>shi</td>
+						<td><span>ス</span><br>su</td>
+						<td><span>セ</span><br>se</td>
+						<td><span>ソ</span><br>so</td>
+					</tr>
+					<tr>
+						<td><span>ザ</span><br>za</td>
+						<td><span>ジ</span><br>ji</td>
+						<td><span>ズ</span><br>zu</td>
+						<td><span>ゼ</span><br>ze</td>
+						<td><span>ゾ</span><br>zo</td>
+					</tr>
+					<tr>
+						<td><span>タ</span><br>ta</td>
+						<td><span>チ</span><br>chi</td>
+						<td><span>ツ</span><br>tsu</td>
+						<td><span>テ</span><br>te</td>
+						<td><span>ト</span><br>to</td>
+					</tr>
+					<tr>
+						<td><span>ダ</span><br>da</td>
+						<td><span>ヂ</span><br>ji</td>
+						<td><span>ヅ</span><br>zu</td>
+						<td><span>デ</span><br>de</td>
+						<td><span>ド</span><br>do</td>
+					</tr>
+					<tr>
+						<td><span>ナ</span><br>na</td>
+						<td><span>ニ</span><br>ni</td>
+						<td><span>ヌ</span><br>nu</td>
+						<td><span>ネ</span><br>ne</td>
+						<td><span>ノ</span><br>no</td>
+					</tr>
+					<tr>
+						<td><span>ハ</span><br>ha</td>
+						<td><span>ヒ</span><br>hi</td>
+						<td><span>フ</span><br>fu</td>
+						<td><span>ヘ</span><br>he</td>
+						<td><span>ホ</span><br>ho</td>
+					</tr>
+					<tr>
+						<td><span>バ</span><br>ba</td>
+						<td><span>ビ</span><br>bi</td>
+						<td><span>ブ</span><br>bu</td>
+						<td><span>ベ</span><br>be</td>
+						<td><span>ボ</span><br>bo</td>
+					</tr>
+					<tr>
+						<td><span>パ</span><br>pa</td>
+						<td><span>ピ</span><br>pi</td>
+						<td><span>プ</span><br>pu</td>
+						<td><span>ペ</span><br>pe</td>
+						<td><span>ポ</span><br>po</td>
+					</tr>
+					<tr>
+						<td><span>マ</span><br>ma</td>
+						<td><span>ミ</span><br>mi</td>
+						<td><span>ム</span><br>mu</td>
+						<td><span>メ</span><br>me</td>
+						<td><span>モ</span><br>mo</td>
+					</tr>
+					<tr>
+						<td><span>ヤ</span><br>ya</td>
+						<td></td>
+						<td><span>ユ</span><br>yu</td>
+						<td></td>
+						<td><span>ヨ</span><br>yo</td>
+					</tr>
+					<tr>
+						<td><span>ラ</span><br>ra</td>
+						<td><span>リ</span><br>ri</td>
+						<td><span>ル</span><br>ru</td>
+						<td><span>レ</span><br>re</td>
+						<td><span>ロ</span><br>ro</td>
+					</tr>
+					<tr>
+						<td><span>ワ</span><br>wa</td>
+						<td><span>ヲ</span><br>wo</td>
+						<td><span>ン</span><br>n/m</td>
+						<td></td>
+						<td></td>
+					</tr>
+				</table>
+			</td>
+		</tr>
+	</table>
+</body>
+</html>
